@@ -2,6 +2,10 @@
 
 ---
 
+### Current state
+
+A first test produced files which were accepted by the Tonie box.
+
 ### Usage
 
 ```
@@ -23,6 +27,17 @@ optional arguments:
   --append-tonie-filename
                         append [500304E0] to filename
 ```
+
+### Firmware problems
+
+The most recent firmware version of the Tonie box has a few drawbacks:
+
+* Reading custom NFC tags while connected to the internet will result in the deletion of the associated audio data.
+* (*not fully checked*) When the box boots (i.e. after re-connecting the battery) it will always enable Wi-Fi and, if it can reach the Tonie cloud, it will set the "hidden" FAT filesystem attribute for custom audio data files. This will have the effect of enabling "live" mode for these files => the NFC tag will always trigger playback of the beginning of the file (no matter whether another NFC tag was used in-between).
+
+Other tidbits:
+
+(*found somewhere else; unconfirmed*) If you replace an official Tonie with custom content and keep the same `timestamp` as the official file, the replaced content will even work when the box is online.  
 
 ### Tonie header
 

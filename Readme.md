@@ -6,8 +6,8 @@
 
 ```
 ./opus2tonie.py -h
-usage: opus2tonie.py [-h] [--file FILE | --dir DIR] [--append-tonie-filename]
-                     [--no-tonie-header]
+usage: opus2tonie.py [-h] [--file FILE | --dir DIR] [--ts TIMESTAMP]
+                     [--append-tonie-filename] [--no-tonie-header]
                      TARGET
 
 Create Tonie compatible file from Ogg opus file(s).
@@ -19,9 +19,9 @@ optional arguments:
   -h, --help            show this help message and exit
   --file FILE           read only a single source file
   --dir DIR             read all files in directory
+  --ts TIMESTAMP        set custom timestamp / bitstream serial
   --append-tonie-filename
                         append [500304E0] to filename
-  --no-tonie-header     do not write Tonie header
 ```
 
 ### Tonie header

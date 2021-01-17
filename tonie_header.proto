@@ -1,0 +1,11 @@
+syntax = 'proto3';
+
+package tonie;
+
+message TonieHeader {
+  bytes dataHash = 1;
+  uint32 dataLength = 2;
+  uint32 timestamp = 3;
+  repeated uint32 chapterPages = 4 [packed=true];
+  bytes padding = 5;
+}

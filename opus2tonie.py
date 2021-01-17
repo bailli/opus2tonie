@@ -591,6 +591,7 @@ group.add_argument('--file', dest='single_file_name', metavar='FILE', action='st
                     help='read only a single source file')
 group.add_argument('--dir', dest='source_directory', metavar='DIR', action='store',
                     help='read all files in directory')
+parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store', help='set custom timestamp / bitstream serial')
 parser.add_argument('--append-tonie-filename', action='store_true', help='append [500304E0] to filename')
 parser.add_argument('--no-tonie-header', action='store_true', help='do not write Tonie header')
 
@@ -605,7 +606,13 @@ with open(out_filename, "wb") as out_file:
     if not args.no_tonie_header:
         out_file.write(bytearray(0x1000))
 
-    timestamp = int(time.time())
+    if args.user_timestamp:
+        if args.user_timestamp.startswith("0x"):
+            timestamp = int(args.user_timestamp, 16)
+        else:
+            timestamp = int(args.user_timestamp)
+    else:
+        timestamp = int(time.time())
 
     sha1 = hashlib.sha1()
 

@@ -343,7 +343,7 @@ class OggPage:
             return packet_bytes_needed - size_of_padding_count_data + 1
 
 
-    def pad_v2(self, pad_to):
+    def pad(self, pad_to):
         # print("page size before {}".format(self.get_page_size()))
         idx = len(self.segments) - 1
         while not self.segments[idx].first_packet:
@@ -361,7 +361,7 @@ class OggPage:
             return
         if actual_padding == OTHER_PACKET_NEEDED:
             self.pad_one_byte()
-            self.pad_v2(pad_to)
+            self.pad(pad_to)
             return
 
         self.convert_packet_to_framepacking_three_and_pad(idx, True, actual_padding)
@@ -469,11 +469,12 @@ def prepare_opus_tags(page):
     return page
 
 
-def copy_first_and_second_page(in_file, out_file, sha):
+def copy_first_and_second_page(in_file, out_file, timestamp, sha):
     found = OggPage.seek_to_page_header(in_file)
     if not found:
         raise RuntimeError("First ogg page not found")
     page = OggPage(in_file)
+    page.serial_no = timestamp
     check_identification_header(page)
     page.write_page(out_file, sha)
 
@@ -481,6 +482,7 @@ def copy_first_and_second_page(in_file, out_file, sha):
     if not found:
         raise RuntimeError("Second ogg page not found")
     page = OggPage(in_file)
+    page.serial_no = timestamp
     page = prepare_opus_tags(page)
     page.write_page(out_file, sha)
 
@@ -530,7 +532,7 @@ def resize_pages(old_pages, max_page_size, first_page_size, template_page, last_
             if not len(page.segments):
                 page = None
         else:
-            new_page.pad_v2(max_size)
+            new_page.pad(max_size)
             new_page.correct_values(last_granule)
             last_granule = new_page.granule_position
             new_pages.append(new_page)
@@ -543,7 +545,7 @@ def resize_pages(old_pages, max_page_size, first_page_size, template_page, last_
     if len(new_page.segments):
         if set_last_page_flag:
             new_page.page_type = 4
-        new_page.pad_v2(max_size)
+        new_page.pad(max_size)
         new_page.correct_values(last_granule)
         new_pages.append(new_page)
 
@@ -558,12 +560,12 @@ def append_to_filename(output_filename, suffix):
         return output_filename[:pos] + " " + suffix + output_filename[pos:]
 
 
-def fix_tonie_header(out_file, chapters, sha):
+def fix_tonie_header(out_file, chapters, timestamp, sha):
     tonie_header = tonie_header_pb2.TonieHeader()
 
     tonie_header.dataHash = sha.digest()
     tonie_header.dataLength = out_file.seek(0, 1) - 0x1000
-    tonie_header.timestamp = int(time.time())
+    tonie_header.timestamp = timestamp
 
     for chapter in chapters:
         tonie_header.chapterPages.append(chapter)
@@ -603,6 +605,8 @@ with open(out_filename, "wb") as out_file:
     if not args.no_tonie_header:
         out_file.write(bytearray(0x1000))
 
+    timestamp = int(time.time())
+
     sha1 = hashlib.sha1()
 
     template_page = None
@@ -629,7 +633,7 @@ with open(out_filename, "wb") as out_file:
 
         with open(fname, "rb") as inFile:
             if next_page_no == 2:
-                copy_first_and_second_page(inFile, out_file, sha1)
+                copy_first_and_second_page(inFile, out_file, timestamp, sha1)
             else:
                 other_size = max_size
                 skip_first_two_pages(inFile)
@@ -638,6 +642,7 @@ with open(out_filename, "wb") as out_file:
 
             if template_page is None:
                 template_page = OggPage.from_page(pages[0])
+                template_page.serial_no = timestamp
 
             if next_page_no == 2:
                 chapters.append(0)
@@ -653,4 +658,4 @@ with open(out_filename, "wb") as out_file:
             next_page_no = last_page.page_no + 1
 
     if not args.no_tonie_header:
-        fix_tonie_header(out_file, chapters, sha1)
+        fix_tonie_header(out_file, chapters, timestamp, sha1)

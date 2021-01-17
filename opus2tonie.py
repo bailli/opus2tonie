@@ -475,6 +475,7 @@ def copy_first_and_second_page(in_file, out_file, timestamp, sha):
         raise RuntimeError("First ogg page not found")
     page = OggPage(in_file)
     page.serial_no = timestamp
+    page.checksum = page.calc_checksum()
     check_identification_header(page)
     page.write_page(out_file, sha)
 
@@ -483,6 +484,7 @@ def copy_first_and_second_page(in_file, out_file, timestamp, sha):
         raise RuntimeError("Second ogg page not found")
     page = OggPage(in_file)
     page.serial_no = timestamp
+    page.checksum = page.calc_checksum()
     page = prepare_opus_tags(page)
     page.write_page(out_file, sha)
 
@@ -638,14 +640,14 @@ with open(out_filename, "wb") as out_file:
         if index == len(files) - 1:
             last_track = True
 
-        with open(fname, "rb") as inFile:
+        with open(fname, "rb") as in_file:
             if next_page_no == 2:
-                copy_first_and_second_page(inFile, out_file, timestamp, sha1)
+                copy_first_and_second_page(in_file, out_file, timestamp, sha1)
             else:
                 other_size = max_size
-                skip_first_two_pages(inFile)
+                skip_first_two_pages(in_file)
 
-            pages = read_all_remaining_pages(inFile)
+            pages = read_all_remaining_pages(in_file)
 
             if template_page is None:
                 template_page = OggPage.from_page(pages[0])

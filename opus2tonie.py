@@ -3,8 +3,11 @@
 import argparse
 import glob
 import hashlib
+import os
 import math
 import struct
+import subprocess
+import tempfile
 import time
 import tonie_header_pb2
 
@@ -410,8 +413,9 @@ class OggPage:
 
     @staticmethod
     def seek_to_page_header(filehandle):
-        current_pos = filehandle.seek(0, 1)
-        size = filehandle.seek(0, 2)
+        current_pos = filehandle.tell()
+        filehandle.seek(0, 2)
+        size = filehandle.tell()
         filehandle.seek(current_pos, 0)
         five_bytes = filehandle.read(5)
         while five_bytes and (filehandle.tell() + 5 < size):
@@ -584,16 +588,43 @@ def fix_tonie_header(out_file, chapters, timestamp, sha):
     out_file.write(header)
 
 
+def get_opus_tempfile(ffmpeg_binary, opus_binary, filename, bitrate, vbr=True):
+    if not vbr:
+        vbr_parameter = "--hard-cbr"
+    else:
+        vbr_parameter = "--vbr"
+
+    ffmpeg_process = subprocess.Popen(
+        ["{}".format(ffmpeg_binary), "-hide_banner", "-loglevel", "warning", "-i", "{}".format(filename), "-f", "wav", "-ar", "48000",
+         "-"], stdout=subprocess.PIPE)
+    opusenc_process = subprocess.Popen(
+        ["{}".format(opus_binary), "--quiet", vbr_parameter, "--bitrate", "{:d}".format(bitrate), "-", "-"],
+        stdin=ffmpeg_process.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    tmp_file = tempfile.SpooledTemporaryFile()
+    for c in iter(lambda: opusenc_process.stdout.read(1), b""):
+        tmp_file.write(c)
+    tmp_file.seek(0)
+
+    return tmp_file
+
+
+def filter_directories(glob_list):
+    result = []
+    for name in glob_list:
+        if os.path.isfile(name):
+            result.append(name)
+    return result
+
+
 crc_table = create_table()
 
 parser = argparse.ArgumentParser(description='Create Tonie compatible file from Ogg opus file(s).')
-parser.add_argument('output_filename', metavar='TARGET', type=str, help='the output file name')
-group = parser.add_mutually_exclusive_group()
-group.add_argument('--file', dest='single_file_name', metavar='FILE', action='store',
-                    help='read only a single source file')
-group.add_argument('--dir', dest='source_directory', metavar='DIR', action='store',
-                    help='read all files in directory')
+parser.add_argument('input_filename', metavar='SOURCE', type=str, help='input file or directory')
+parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str, help='the output file name (default: 500304E0)', default='500304E0')
 parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store', help='set custom timestamp / bitstream serial')
+parser.add_argument('--ffmpeg', help='specify location of ffmpeg', default='ffmpeg')
+parser.add_argument('--opusenc', help='specify location of opusenc', default='opusenc')
 parser.add_argument('--append-tonie-filename', action='store_true', help='append [500304E0] to filename')
 parser.add_argument('--no-tonie-header', action='store_true', help='do not write Tonie header')
 
@@ -603,6 +634,11 @@ if args.append_tonie_filename:
     out_filename = append_to_filename(args.output_filename, "[500304E0]")
 else:
     out_filename = args.output_filename
+
+if os.path.isdir(args.input_filename):
+    args.input_filename += "/*"
+
+files = sorted(filter_directories(glob.glob("{}".format(args.input_filename))))
 
 with open(out_filename, "wb") as out_file:
     if not args.no_tonie_header:
@@ -626,11 +662,6 @@ with open(out_filename, "wb") as out_file:
     other_size = 0xE00
     last_track = False
 
-    if args.single_file_name:
-        files = [args.single_file_name]
-    else:
-        files = sorted(glob.glob("{}/*.opus".format(args.source_directory)))
-
     pad_len = math.ceil(math.log(len(files) + 1, 10))
     format_string = "[{{:0{}d}}/{:0{}d}] {{}}".format(pad_len, len(files), pad_len)
 
@@ -640,14 +671,19 @@ with open(out_filename, "wb") as out_file:
         if index == len(files) - 1:
             last_track = True
 
-        with open(fname, "rb") as in_file:
+        if fname.lower().endswith(".opus"):
+            handle = open(fname, "rb")
+        else:
+            handle = get_opus_tempfile(args.ffmpeg, args.opusenc, fname, 96)
+
+        try:
             if next_page_no == 2:
-                copy_first_and_second_page(in_file, out_file, timestamp, sha1)
+                copy_first_and_second_page(handle, out_file, timestamp, sha1)
             else:
                 other_size = max_size
-                skip_first_two_pages(in_file)
+                skip_first_two_pages(handle)
 
-            pages = read_all_remaining_pages(in_file)
+            pages = read_all_remaining_pages(handle)
 
             if template_page is None:
                 template_page = OggPage.from_page(pages[0])
@@ -665,6 +701,8 @@ with open(out_filename, "wb") as out_file:
             last_page = new_pages[len(new_pages) - 1]
             total_granule = last_page.granule_position
             next_page_no = last_page.page_no + 1
+        finally:
+            handle.close()
 
     if not args.no_tonie_header:
         fix_tonie_header(out_file, chapters, timestamp, sha1)

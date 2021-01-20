@@ -10,22 +10,25 @@ A first test produced files which were accepted by the Tonie box.
 
 ```
 ./opus2tonie.py -h
-usage: opus2tonie.py [-h] [--file FILE | --dir DIR] [--ts TIMESTAMP]
-                     [--append-tonie-filename] [--no-tonie-header]
-                     TARGET
+usage: opus2tonie.py [-h] [--ts TIMESTAMP] [--ffmpeg FFMPEG]
+                     [--opusenc OPUSENC] [--append-tonie-filename]
+                     [--no-tonie-header]
+                     SOURCE [TARGET]
 
 Create Tonie compatible file from Ogg opus file(s).
 
 positional arguments:
-  TARGET                the output file name
+  SOURCE                input file or directory
+  TARGET                the output file name (default: 500304E0)
 
 optional arguments:
   -h, --help            show this help message and exit
-  --file FILE           read only a single source file
-  --dir DIR             read all files in directory
   --ts TIMESTAMP        set custom timestamp / bitstream serial
+  --ffmpeg FFMPEG       specify location of ffmpeg
+  --opusenc OPUSENC     specify location of opusenc
   --append-tonie-filename
                         append [500304E0] to filename
+  --no-tonie-header     do not write Tonie header
 ```
 
 ### Firmware problems
@@ -47,17 +50,9 @@ To generate the python output run:
 
 `protoc --python_out=. tonie_header.proto`
 
-### Creating opus files
+### Input files
 
-As input only stereo opus files with 48 kHz sampling rate are accepted. The original software seems to use 96 kbit/s VBR encoding.
-
-You can create input files from mp3 using ffmpeg und opusenc:
-
-```bash
-for f in ./*.mp3; do 
-  ffmpeg -i "$f" -f wav -ar 48000 - | opusenc --quiet --vbr --bitrate 96 - "$(basename -s mp3 "$f")opus"
-done
-```
+If you have `ffmpeg` and `opusenc` in your path (or specify their location) you can use any input files which `ffmpeg` can read. Otherwise you are limited to stereo 48 kHz opus files.
 
 ### Some useful resources
 * https://en.wikipedia.org/wiki/Ogg_page

@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 
 import argparse
+import datetime
 import glob
 import hashlib
 import os
 import math
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import tonie_header_pb2
@@ -55,6 +57,7 @@ class OpusPacket:
             unpacked = struct.unpack("<B", self.data[1:2])
             return unpacked[0] & 63
 
+
     def get_padding(self):
         if self.framepacking != 3:
             return 0
@@ -74,13 +77,13 @@ class OpusPacket:
 
 
     def get_frame_size(self):
-        if (self.config_value == 16) or (self.config_value == 20) or (self.config_value == 24) or (self.config_value == 28):
+        if self.config_value in [16, 20, 24, 28]:
             return 2.5
-        elif (self.config_value == 17) or (self.config_value == 21) or (self.config_value == 25) or (self.config_value == 29):
+        elif self.config_value in [17, 21, 25, 29]:
             return 5
-        elif (self.config_value == 18) or (self.config_value == 22) or (self.config_value == 26) or (self.config_value == 30):
+        elif self.config_value in [18, 22, 26, 30]:
             return 10
-        elif (self.config_value == 19) or (self.config_value == 23) or (self.config_value == 27) or (self.config_value == 31):
+        elif self.config_value in [19, 23, 27, 31]:
             return 20
         else:
             raise RuntimeError("Please add frame size for config value {}".format(self.config_value))
@@ -178,7 +181,7 @@ class OggPage:
             last_length = length
             self.segments.append(segment)
 
-        if self.segments[len(self.segments)-1].spanning_packet:
+        if self.segments[len(self.segments) - 1].spanning_packet:
             raise RuntimeError("Found an opus packet spanning ogg pages. This is not supported yet.")
 
 
@@ -196,7 +199,8 @@ class OggPage:
 
 
     def calc_checksum(self):
-        data = b"OggS" + struct.pack("<BBQLLLB", self.version, self.page_type, self.granule_position, self.serial_no, self.page_no, 0, self.segment_count)
+        data = b"OggS" + struct.pack("<BBQLLLB", self.version, self.page_type, self.granule_position, self.serial_no,
+                                     self.page_no, 0, self.segment_count)
         for segment in self.segments:
             data = data + struct.pack("<B", segment.size)
         for segment in self.segments:
@@ -204,6 +208,7 @@ class OggPage:
 
         crc = crc32(data)
         return crc
+
 
     def get_page_size(self):
         size = 27 + len(self.segments)
@@ -387,7 +392,8 @@ class OggPage:
 
 
     def write_page(self, filehandle, sha1):
-        data = b"OggS" + struct.pack("<BBQLLLB", self.version, self.page_type, self.granule_position, self.serial_no, self.page_no, self.checksum, self.segment_count)
+        data = b"OggS" + struct.pack("<BBQLLLB", self.version, self.page_type, self.granule_position, self.serial_no,
+                                     self.page_no, self.checksum, self.segment_count)
         for segment in self.segments:
             data = data + struct.pack("<B", segment.size)
         sha1.update(data)
@@ -516,7 +522,8 @@ def read_all_remaining_pages(in_file):
     return remaining_pages
 
 
-def resize_pages(old_pages, max_page_size, first_page_size, template_page, last_granule=0, start_no=2, set_last_page_flag=False):
+def resize_pages(old_pages, max_page_size, first_page_size, template_page, last_granule=0, start_no=2,
+                 set_last_page_flag=False):
     new_pages = []
     page = None
     page_no = start_no
@@ -588,6 +595,138 @@ def fix_tonie_header(out_file, chapters, timestamp, sha):
     out_file.write(header)
 
 
+def get_header_info(in_file):
+    tonie_header = tonie_header_pb2.TonieHeader()
+    header_size = struct.unpack(">L", in_file.read(4))[0]
+    tonie_header = tonie_header.FromString(in_file.read(header_size))
+
+    sha1sum = hashlib.sha1(in_file.read())
+
+    file_size = in_file.tell()
+    in_file.seek(4 + header_size)
+    audio_size = file_size - in_file.tell()
+
+    found = OggPage.seek_to_page_header(in_file)
+    if not found:
+        raise RuntimeError("First ogg page not found")
+    first_page = OggPage(in_file)
+
+    unpacked = struct.unpack("<8sBBHLH", first_page.segments[0].data[0:18])
+    opus_head_found = unpacked[0] == b"OpusHead"
+    opus_version = unpacked[1]
+    channel_count = unpacked[2]
+    sample_rate = unpacked[4]
+    bitstream_serial_no = first_page.serial_no
+
+    found = OggPage.seek_to_page_header(in_file)
+    if not found:
+        raise RuntimeError("Second ogg page not found")
+    OggPage(in_file)
+
+    return header_size, tonie_header, file_size, audio_size, sha1sum, opus_head_found, \
+        opus_version, channel_count, sample_rate, bitstream_serial_no
+
+
+def get_audio_info(in_file, sample_rate, tonie_header, header_size):
+    chapter_granules = []
+    if 0 in tonie_header.chapterPages:
+        chapter_granules.append(0)
+
+    alignment_okay = in_file.tell() == (512 + 4 + header_size)
+    page_size_okay = True
+    page_count = 2
+
+    page = None
+    found = OggPage.seek_to_page_header(in_file)
+    while found:
+        page_count = page_count + 1
+        page = OggPage(in_file)
+        if page_size_okay and page_count > 3 and page.get_page_size() != 0x1000:
+            page_size_okay = False
+        if page.page_no in tonie_header.chapterPages:
+            chapter_granules.append(page.granule_position)
+
+        found = OggPage.seek_to_page_header(in_file)
+        if found and in_file.tell() % 0x1000 != 0:
+            alignment_okay = False
+
+    chapter_granules.append(page.granule_position)
+
+    chapter_times = []
+    for i in range(1, len(chapter_granules)):
+        length = chapter_granules[i] - chapter_granules[i - 1]
+        chapter_times.append(granule_to_time_string(length, sample_rate))
+
+    #total_time = granule_to_time_string(page.granule_position, sample_rate)
+    total_time = page.granule_position / sample_rate
+
+    return page_count, alignment_okay, page_size_okay, total_time, chapter_times
+
+
+def format_time(ts):
+    return datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def format_hex(data):
+    return "".join(format(x, "02X") for x in data)
+
+
+def check_tonie_file(filename):
+    with open(filename, "rb") as in_file:
+        header_size, tonie_header, file_size, audio_size, sha1, opus_head_found, \
+            opus_version, channel_count, sample_rate, bitstream_serial_no = get_header_info(in_file)
+
+        page_count, alignment_okay, page_size_okay, total_time, \
+            chapters = get_audio_info(in_file, sample_rate, tonie_header, header_size)
+
+    hash_ok = tonie_header.dataHash == sha1.digest()
+    timestamp_ok = tonie_header.timestamp == bitstream_serial_no
+    audio_size_ok = tonie_header.dataLength == audio_size
+    opus_ok = opus_head_found and opus_version == 1 and sample_rate == 48000 and channel_count == 2
+
+    all_ok = hash_ok and \
+        timestamp_ok and \
+        opus_ok and \
+        alignment_okay and \
+        page_size_okay
+
+    print("[{}] SHA1 hash: 0x{}".format("OK" if hash_ok else "NOT OK", format_hex(tonie_header.dataHash)))
+    if not hash_ok:
+        print("            actual: 0x{}".format(sha1.hexdigest().upper()))
+    print("[{}] Timestamp: [0x{:X}] {}".format("OK" if timestamp_ok else "NOT OK", tonie_header.timestamp,
+                                               format_time(tonie_header.timestamp)))
+    if not timestamp_ok:
+        print("   bitstream serial: 0x{:X}".format(bitstream_serial_no))
+    print("[{}] Opus data length: {} bytes (~{:2.0f} kpbs)".format("OK" if audio_size_ok else "NOT OK", tonie_header.dataLength, (audio_size * 8)/1024/total_time))
+    if not audio_size_ok:
+        print("     actual: {} bytes".format(audio_size))
+
+    print("[{}] Opus header {}OK || {} channels || {:2.1f} kHz || {} Ogg pages"
+          .format("OK" if opus_ok else "NOT OK", "" if opus_head_found and opus_version == 1 else "NOT ",
+                  channel_count, sample_rate / 1000, page_count))
+    print("[{}] Page alignment {}OK and size {}OK"
+          .format("OK" if alignment_okay and page_size_okay else "NOT OK", "" if alignment_okay else "NOT ",
+                  "" if page_size_okay else "NOT "))
+    print("")
+    print("[{}] File is {}valid".format("OK" if all_ok else "NOT OK", "" if all_ok else "NOT "))
+    print("")
+    print("[ii] Total runtime: {}".format(granule_to_time_string(total_time)))
+    print("[ii] {} Tracks:".format(len(chapters)))
+    for i in range(0, len(chapters)):
+        print("  Track {:02d}: {}".format(i+1, chapters[i]))
+    return all_ok
+
+
+def granule_to_time_string(granule, sample_rate=1):
+    total_seconds = granule / sample_rate
+    hours = int(total_seconds / 3600)
+    minutes = int((total_seconds - (hours * 3600)) / 60)
+    seconds = int(total_seconds - (hours * 3600) - (minutes * 60))
+    fraction = int((total_seconds * 100) % 100)
+    time_string = "{:02d}:{:02d}:{:02d}.{:02d}".format(hours, minutes, seconds, fraction)
+    return time_string
+
+
 def get_opus_tempfile(ffmpeg_binary, opus_binary, filename, bitrate, vbr=True):
     if not vbr:
         vbr_parameter = "--hard-cbr"
@@ -595,8 +734,8 @@ def get_opus_tempfile(ffmpeg_binary, opus_binary, filename, bitrate, vbr=True):
         vbr_parameter = "--vbr"
 
     ffmpeg_process = subprocess.Popen(
-        ["{}".format(ffmpeg_binary), "-hide_banner", "-loglevel", "warning", "-i", "{}".format(filename), "-f", "wav", "-ar", "48000",
-         "-"], stdout=subprocess.PIPE)
+        ["{}".format(ffmpeg_binary), "-hide_banner", "-loglevel", "warning", "-i", "{}".format(filename), "-f", "wav",
+         "-ar", "48000", "-"], stdout=subprocess.PIPE)
     opusenc_process = subprocess.Popen(
         ["{}".format(opus_binary), "--quiet", vbr_parameter, "--bitrate", "{:d}".format(bitrate), "-", "-"],
         stdin=ffmpeg_process.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -621,22 +760,29 @@ crc_table = create_table()
 
 parser = argparse.ArgumentParser(description='Create Tonie compatible file from Ogg opus file(s).')
 parser.add_argument('input_filename', metavar='SOURCE', type=str, help='input file or directory')
-parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str, help='the output file name (default: 500304E0)', default='500304E0')
-parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store', help='set custom timestamp / bitstream serial')
+parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str,
+                    help='the output file name (default: 500304E0)', default='500304E0')
+parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store',
+                    help='set custom timestamp / bitstream serial')
 parser.add_argument('--ffmpeg', help='specify location of ffmpeg', default='ffmpeg')
 parser.add_argument('--opusenc', help='specify location of opusenc', default='opusenc')
 parser.add_argument('--append-tonie-filename', action='store_true', help='append [500304E0] to filename')
 parser.add_argument('--no-tonie-header', action='store_true', help='do not write Tonie header')
+parser.add_argument('--info', action='store_true', help='Check and display info about Tonie file.')
 
 args = parser.parse_args()
 
 if args.append_tonie_filename:
-    out_filename = append_to_filename(args.output_filename, "[500304E0]")
+        out_filename = append_to_filename(args.output_filename, "[500304E0]")
 else:
     out_filename = args.output_filename
 
 if os.path.isdir(args.input_filename):
     args.input_filename += "/*"
+else:
+    if args.info:
+        ok = check_tonie_file(args.input_filename)
+        sys.exit(0 if ok else 1)
 
 files = sorted(filter_directories(glob.glob("{}".format(args.input_filename))))
 
@@ -667,7 +813,7 @@ with open(out_filename, "wb") as out_file:
 
     for index in range(len(files)):
         fname = files[index]
-        print(format_string.format(index+1, fname))
+        print(format_string.format(index + 1, fname))
         if index == len(files) - 1:
             last_track = True
 
@@ -694,7 +840,8 @@ with open(out_filename, "wb") as out_file:
             else:
                 chapters.append(next_page_no)
 
-            new_pages = resize_pages(pages, max_size, other_size, template_page, total_granule, next_page_no, last_track)
+            new_pages = resize_pages(pages, max_size, other_size, template_page,
+                                     total_granule, next_page_no, last_track)
 
             for new_page in new_pages:
                 new_page.write_page(out_file, sha1)

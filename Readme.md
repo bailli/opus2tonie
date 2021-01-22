@@ -11,8 +11,8 @@ A first test produced files which were accepted by the Tonie box.
 ```
 ./opus2tonie.py -h
 usage: opus2tonie.py [-h] [--ts TIMESTAMP] [--ffmpeg FFMPEG]
-                     [--opusenc OPUSENC] [--append-tonie-filename]
-                     [--no-tonie-header]
+                     [--opusenc OPUSENC] [--bitrate BITRATE] [--cbr]
+                     [--append-tonie-filename] [--no-tonie-header] [--info]
                      SOURCE [TARGET]
 
 Create Tonie compatible file from Ogg opus file(s).
@@ -26,9 +26,12 @@ optional arguments:
   --ts TIMESTAMP        set custom timestamp / bitstream serial
   --ffmpeg FFMPEG       specify location of ffmpeg
   --opusenc OPUSENC     specify location of opusenc
+  --bitrate BITRATE     set encoding bitrate in kbps (default: 96)
+  --cbr                 encode in cbr mode
   --append-tonie-filename
                         append [500304E0] to filename
   --no-tonie-header     do not write Tonie header
+  --info                Check and display info about Tonie file.
 ```
 
 ### Firmware problems

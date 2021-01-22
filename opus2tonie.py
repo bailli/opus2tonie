@@ -764,8 +764,12 @@ parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str,
                     help='the output file name (default: 500304E0)', default='500304E0')
 parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store',
                     help='set custom timestamp / bitstream serial')
+
 parser.add_argument('--ffmpeg', help='specify location of ffmpeg', default='ffmpeg')
 parser.add_argument('--opusenc', help='specify location of opusenc', default='opusenc')
+parser.add_argument('--bitrate', type=int, help='set encoding bitrate in kbps (default: 96)', default=96)
+parser.add_argument('--cbr', action='store_true', help='encode in cbr mode')
+
 parser.add_argument('--append-tonie-filename', action='store_true', help='append [500304E0] to filename')
 parser.add_argument('--no-tonie-header', action='store_true', help='do not write Tonie header')
 parser.add_argument('--info', action='store_true', help='Check and display info about Tonie file.')
@@ -820,7 +824,7 @@ with open(out_filename, "wb") as out_file:
         if fname.lower().endswith(".opus"):
             handle = open(fname, "rb")
         else:
-            handle = get_opus_tempfile(args.ffmpeg, args.opusenc, fname, 96)
+            handle = get_opus_tempfile(args.ffmpeg, args.opusenc, fname, args.bitrate, not args.cbr)
 
         try:
             if next_page_no == 2:

@@ -539,7 +539,7 @@ def resize_pages(old_pages, max_page_size, first_page_size, template_page, last_
         size = page.get_size_of_first_opus_packet()
         seg_count = page.get_segment_count_of_first_opus_packet()
 
-        if (size + seg_count + new_page.get_page_size() < max_size) and (len(new_page.segments) + seg_count < 256):
+        if (size + seg_count + new_page.get_page_size() <= max_size) and (len(new_page.segments) + seg_count < 256):
             for i in range(seg_count):
                 new_page.segments.append(page.segments.pop(0))
             if not len(page.segments):

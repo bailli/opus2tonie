@@ -9,10 +9,10 @@ A first test produced files which were accepted by the Tonie box.
 ### Usage
 
 ```
-./opus2tonie.py -h
 usage: opus2tonie.py [-h] [--ts TIMESTAMP] [--ffmpeg FFMPEG]
                      [--opusenc OPUSENC] [--bitrate BITRATE] [--cbr]
                      [--append-tonie-filename] [--no-tonie-header] [--info]
+                     [--split]
                      SOURCE [TARGET]
 
 Create Tonie compatible file from Ogg opus file(s).
@@ -31,7 +31,8 @@ optional arguments:
   --append-tonie-filename
                         append [500304E0] to filename
   --no-tonie-header     do not write Tonie header
-  --info                Check and display info about Tonie file.
+  --info                Check and display info about Tonie file
+  --split               Split Tonie file into opus tracks
 ```
 
 ### Firmware problems

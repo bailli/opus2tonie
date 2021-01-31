@@ -772,7 +772,7 @@ def check_tonie_file(filename):
                                                format_time(tonie_header.timestamp)))
     if not timestamp_ok:
         print("   bitstream serial: 0x{:X}".format(bitstream_serial_no))
-    print("[{}] Opus data length: {} bytes (~{:2.0f} kpbs)".format("OK" if audio_size_ok else "NOT OK",
+    print("[{}] Opus data length: {} bytes (~{:2.0f} kbps)".format("OK" if audio_size_ok else "NOT OK",
                                                                    tonie_header.dataLength,
                                                                    (audio_size * 8)/1024/total_time))
     if not audio_size_ok:

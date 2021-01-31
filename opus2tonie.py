@@ -390,15 +390,17 @@ class OggPage:
             self.convert_packet_to_framepacking_three_and_pad(i)
 
 
-    def write_page(self, filehandle, sha1):
+    def write_page(self, filehandle, sha1=None):
         data = b"OggS" + struct.pack("<BBQLLLB", self.version, self.page_type, self.granule_position, self.serial_no,
                                      self.page_no, self.checksum, self.segment_count)
         for segment in self.segments:
             data = data + struct.pack("<B", segment.size)
-        sha1.update(data)
+        if sha1 is not None:
+            sha1.update(data)
         filehandle.write(data)
         for segment in self.segments:
-            sha1.update(segment.data)
+            if sha1 is not None:
+                sha1.update(segment.data)
             segment.write(filehandle)
 
 
@@ -650,7 +652,6 @@ def get_audio_info(in_file, sample_rate, tonie_header, header_size):
         if page.page_no in tonie_header.chapterPages:
             chapter_granules.append(page.granule_position)
 
-
     chapter_granules.append(page.granule_position)
 
     chapter_times = []
@@ -683,9 +684,9 @@ def check_tonie_file(filename):
     timestamp_ok = tonie_header.timestamp == bitstream_serial_no
     audio_size_ok = tonie_header.dataLength == audio_size
     opus_ok = opus_head_found and \
-              opus_version == 1 and \
-              (sample_rate == 48000 or sample_rate == 44100) and \
-              channel_count == 2
+        opus_version == 1 and \
+        (sample_rate == 48000 or sample_rate == 44100) and \
+        channel_count == 2
 
     all_ok = hash_ok and \
         timestamp_ok and \
@@ -700,7 +701,9 @@ def check_tonie_file(filename):
                                                format_time(tonie_header.timestamp)))
     if not timestamp_ok:
         print("   bitstream serial: 0x{:X}".format(bitstream_serial_no))
-    print("[{}] Opus data length: {} bytes (~{:2.0f} kpbs)".format("OK" if audio_size_ok else "NOT OK", tonie_header.dataLength, (audio_size * 8)/1024/total_time))
+    print("[{}] Opus data length: {} bytes (~{:2.0f} kpbs)".format("OK" if audio_size_ok else "NOT OK",
+                                                                   tonie_header.dataLength,
+                                                                   (audio_size * 8)/1024/total_time))
     if not audio_size_ok:
         print("     actual: {} bytes".format(audio_size))
 
@@ -759,6 +762,58 @@ def filter_directories(glob_list):
     return result
 
 
+def split_to_opus_files(filename):
+    with open(filename, "rb") as in_file:
+        tonie_header = tonie_header_pb2.TonieHeader()
+        header_size = struct.unpack(">L", in_file.read(4))[0]
+        tonie_header = tonie_header.FromString(in_file.read(header_size))
+
+        abs_path = os.path.abspath(filename)
+        path = os.path.dirname(abs_path)
+        name = os.path.basename(abs_path)
+        pos = name.rfind('.')
+        if pos == -1:
+            name = name + ".opus"
+        else:
+            name = name[:pos] + ".opus"
+        filename_template = "{{:02d}}_{}".format(name)
+        out_path = "{}{}".format(path, os.path.sep)
+
+        found = OggPage.seek_to_page_header(in_file)
+        if not found:
+            raise RuntimeError("First ogg page not found")
+        first_page = OggPage(in_file)
+
+        found = OggPage.seek_to_page_header(in_file)
+        if not found:
+            raise RuntimeError("Second ogg page not found")
+        second_page = OggPage(in_file)
+
+        found = OggPage.seek_to_page_header(in_file)
+        page = OggPage(in_file)
+
+        pad_len = math.ceil(math.log(len(tonie_header.chapterPages) + 1, 10))
+        format_string = "[{{:0{}d}}/{:0{}d}] {{}}".format(pad_len, len(tonie_header.chapterPages), pad_len)
+
+        for i in range(0, len(tonie_header.chapterPages)):
+            if (i + 1) < len(tonie_header.chapterPages):
+                end_page = tonie_header.chapterPages[i + 1]
+            else:
+                end_page = 0
+            granule = 0
+            print(format_string.format(i+1, filename_template.format(i+1)))
+            with open("{}{}".format(out_path, filename_template.format(i+1)), "wb") as out_file:
+                first_page.write_page(out_file)
+                second_page.write_page(out_file)
+                while found and ((page.page_no < end_page) or (end_page == 0)):
+                    page.correct_values(granule)
+                    granule = page.granule_position
+                    page.write_page(out_file)
+                    found = OggPage.seek_to_page_header(in_file)
+                    if found:
+                        page = OggPage(in_file)
+
+
 crc_table = create_table()
 
 parser = argparse.ArgumentParser(description='Create Tonie compatible file from Ogg opus file(s).')
@@ -775,12 +830,14 @@ parser.add_argument('--cbr', action='store_true', help='encode in cbr mode')
 
 parser.add_argument('--append-tonie-filename', action='store_true', help='append [500304E0] to filename')
 parser.add_argument('--no-tonie-header', action='store_true', help='do not write Tonie header')
-parser.add_argument('--info', action='store_true', help='Check and display info about Tonie file.')
+parser.add_argument('--info', action='store_true', help='Check and display info about Tonie file')
+parser.add_argument('--split', action='store_true', help='Split Tonie file into opus tracks')
+
 
 args = parser.parse_args()
 
 if args.append_tonie_filename:
-        out_filename = append_to_filename(args.output_filename, "[500304E0]")
+    out_filename = append_to_filename(args.output_filename, "[500304E0]")
 else:
     out_filename = args.output_filename
 
@@ -790,8 +847,15 @@ else:
     if args.info:
         ok = check_tonie_file(args.input_filename)
         sys.exit(0 if ok else 1)
+    elif args.split:
+        split_to_opus_files(args.input_filename)
+        sys.exit(0)
 
 files = sorted(filter_directories(glob.glob("{}".format(args.input_filename))))
+
+if len(files) == 0:
+    print("No files found for pattern {}".format(args.input_filename))
+    sys.exit(1)
 
 with open(out_filename, "wb") as out_file:
     if not args.no_tonie_header:

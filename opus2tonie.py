@@ -596,6 +596,77 @@ def fix_tonie_header(out_file, chapters, timestamp, sha):
     out_file.write(header)
 
 
+def create_tonie_file(output_file, input_files, no_tonie_header=False, user_timestamp=None,
+                      bitrate=96, cbr=False, ffmpeg='ffmpeg', opusenc='opusenc'):
+    with open(output_file, "wb") as out_file:
+        if not no_tonie_header:
+            out_file.write(bytearray(0x1000))
+
+        if user_timestamp is not None:
+            if user_timestamp.startswith("0x"):
+                timestamp = int(user_timestamp, 16)
+            else:
+                timestamp = int(user_timestamp)
+        else:
+            timestamp = int(time.time())
+
+        sha1 = hashlib.sha1()
+
+        template_page = None
+        chapters = []
+        total_granule = 0
+        next_page_no = 2
+        max_size = 0x1000
+        other_size = 0xE00
+        last_track = False
+
+        pad_len = math.ceil(math.log(len(input_files) + 1, 10))
+        format_string = "[{{:0{}d}}/{:0{}d}] {{}}".format(pad_len, len(input_files), pad_len)
+
+        for index in range(len(input_files)):
+            fname = input_files[index]
+            print(format_string.format(index + 1, fname))
+            if index == len(input_files) - 1:
+                last_track = True
+
+            if fname.lower().endswith(".opus"):
+                handle = open(fname, "rb")
+            else:
+                handle = get_opus_tempfile(ffmpeg, opusenc, fname, bitrate, not cbr)
+
+            try:
+                if next_page_no == 2:
+                    copy_first_and_second_page(handle, out_file, timestamp, sha1)
+                else:
+                    other_size = max_size
+                    skip_first_two_pages(handle)
+
+                pages = read_all_remaining_pages(handle)
+
+                if template_page is None:
+                    template_page = OggPage.from_page(pages[0])
+                    template_page.serial_no = timestamp
+
+                if next_page_no == 2:
+                    chapters.append(0)
+                else:
+                    chapters.append(next_page_no)
+
+                new_pages = resize_pages(pages, max_size, other_size, template_page,
+                                         total_granule, next_page_no, last_track)
+
+                for new_page in new_pages:
+                    new_page.write_page(out_file, sha1)
+                last_page = new_pages[len(new_pages) - 1]
+                total_granule = last_page.granule_position
+                next_page_no = last_page.page_no + 1
+            finally:
+                handle.close()
+
+        if not no_tonie_header:
+            fix_tonie_header(out_file, chapters, timestamp, sha1)
+
+
 def get_header_info(in_file):
     tonie_header = tonie_header_pb2.TonieHeader()
     header_size = struct.unpack(">L", in_file.read(4))[0]
@@ -833,7 +904,6 @@ parser.add_argument('--no-tonie-header', action='store_true', help='do not write
 parser.add_argument('--info', action='store_true', help='Check and display info about Tonie file')
 parser.add_argument('--split', action='store_true', help='Split Tonie file into opus tracks')
 
-
 args = parser.parse_args()
 
 if args.append_tonie_filename:
@@ -857,70 +927,5 @@ if len(files) == 0:
     print("No files found for pattern {}".format(args.input_filename))
     sys.exit(1)
 
-with open(out_filename, "wb") as out_file:
-    if not args.no_tonie_header:
-        out_file.write(bytearray(0x1000))
-
-    if args.user_timestamp:
-        if args.user_timestamp.startswith("0x"):
-            timestamp = int(args.user_timestamp, 16)
-        else:
-            timestamp = int(args.user_timestamp)
-    else:
-        timestamp = int(time.time())
-
-    sha1 = hashlib.sha1()
-
-    template_page = None
-    chapters = []
-    total_granule = 0
-    next_page_no = 2
-    max_size = 0x1000
-    other_size = 0xE00
-    last_track = False
-
-    pad_len = math.ceil(math.log(len(files) + 1, 10))
-    format_string = "[{{:0{}d}}/{:0{}d}] {{}}".format(pad_len, len(files), pad_len)
-
-    for index in range(len(files)):
-        fname = files[index]
-        print(format_string.format(index + 1, fname))
-        if index == len(files) - 1:
-            last_track = True
-
-        if fname.lower().endswith(".opus"):
-            handle = open(fname, "rb")
-        else:
-            handle = get_opus_tempfile(args.ffmpeg, args.opusenc, fname, args.bitrate, not args.cbr)
-
-        try:
-            if next_page_no == 2:
-                copy_first_and_second_page(handle, out_file, timestamp, sha1)
-            else:
-                other_size = max_size
-                skip_first_two_pages(handle)
-
-            pages = read_all_remaining_pages(handle)
-
-            if template_page is None:
-                template_page = OggPage.from_page(pages[0])
-                template_page.serial_no = timestamp
-
-            if next_page_no == 2:
-                chapters.append(0)
-            else:
-                chapters.append(next_page_no)
-
-            new_pages = resize_pages(pages, max_size, other_size, template_page,
-                                     total_granule, next_page_no, last_track)
-
-            for new_page in new_pages:
-                new_page.write_page(out_file, sha1)
-            last_page = new_pages[len(new_pages) - 1]
-            total_granule = last_page.granule_position
-            next_page_no = last_page.page_no + 1
-        finally:
-            handle.close()
-
-    if not args.no_tonie_header:
-        fix_tonie_header(out_file, chapters, timestamp, sha1)
+create_tonie_file(out_filename, files, args.no_tonie_header, args.user_timestamp,
+                  args.bitrate, args.cbr, args.ffmpeg, args.opusenc)

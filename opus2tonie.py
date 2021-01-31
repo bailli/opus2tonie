@@ -373,7 +373,6 @@ class OggPage:
             return
 
         self.convert_packet_to_framepacking_three_and_pad(idx, True, actual_padding)
-        # print("page size after {}".format(self.get_page_size()))
         assert self.get_page_size() == pad_to
 
 
@@ -641,14 +640,16 @@ def get_audio_info(in_file, sample_rate, tonie_header, header_size):
     while found:
         page_count = page_count + 1
         page = OggPage(in_file)
-        if page_size_okay and page_count > 3 and page.get_page_size() != 0x1000:
-            page_size_okay = False
-        if page.page_no in tonie_header.chapterPages:
-            chapter_granules.append(page.granule_position)
 
         found = OggPage.seek_to_page_header(in_file)
         if found and in_file.tell() % 0x1000 != 0:
             alignment_okay = False
+
+        if page_size_okay and page_count > 3 and page.get_page_size() != 0x1000 and found:
+            page_size_okay = False
+        if page.page_no in tonie_header.chapterPages:
+            chapter_granules.append(page.granule_position)
+
 
     chapter_granules.append(page.granule_position)
 
@@ -657,7 +658,6 @@ def get_audio_info(in_file, sample_rate, tonie_header, header_size):
         length = chapter_granules[i] - chapter_granules[i - 1]
         chapter_times.append(granule_to_time_string(length, sample_rate))
 
-    #total_time = granule_to_time_string(page.granule_position, sample_rate)
     total_time = page.granule_position / sample_rate
 
     return page_count, alignment_okay, page_size_okay, total_time, chapter_times
@@ -682,7 +682,10 @@ def check_tonie_file(filename):
     hash_ok = tonie_header.dataHash == sha1.digest()
     timestamp_ok = tonie_header.timestamp == bitstream_serial_no
     audio_size_ok = tonie_header.dataLength == audio_size
-    opus_ok = opus_head_found and opus_version == 1 and sample_rate == 48000 and channel_count == 2
+    opus_ok = opus_head_found and \
+              opus_version == 1 and \
+              (sample_rate == 48000 or sample_rate == 44100) and \
+              channel_count == 2
 
     all_ok = hash_ok and \
         timestamp_ok and \

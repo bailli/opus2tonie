@@ -18,6 +18,7 @@ SAMPLE_RATE_KHZ = 48
 ONLY_CONVERT_FRAMEPACKING = -1
 OTHER_PACKET_NEEDED = -2
 DO_NOTHING = -3
+TOO_MANY_SEGMENTS = -4
 
 OPUS_TAGS = [
     bytearray(b"\x4F\x70\x75\x73\x54\x61\x67\x73\x0D\x00\x00\x00\x4C\x61\x76\x66\x35\x38\x2E\x32\x30\x2E\x31\x30\x30\x03\x00\x00\x00\x26\x00\x00\x00\x65\x6E\x63\x6F\x64\x65\x72\x3D\x6F\x70\x75\x73\x65\x6E\x63\x20\x66\x72\x6F\x6D\x20\x6F\x70\x75\x73\x2D\x74\x6F\x6F\x6C\x73\x20\x30\x2E\x31\x2E\x31\x30\x2A\x00\x00\x00\x65\x6E\x63\x6F\x64\x65\x72\x5F\x6F\x70\x74\x69\x6F\x6E\x73\x3D\x2D\x2D\x71\x75\x69\x65\x74\x20\x2D\x2D\x62\x69\x74\x72\x61\x74\x65\x20\x39\x36\x20\x2D\x2D\x76\x62\x72\x3B\x01\x00\x00\x70\x61\x64\x3D\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30"),
@@ -328,6 +329,10 @@ class OggPage:
                 tmp_count = tmp_count - 255 - 1
                 new_segments_needed = new_segments_needed + 1
 
+        if new_segments_needed + self.get_segment_count_of_packet_at(seg_start) > 255:
+            print("Too many segments needed {}".format(new_segments_needed + self.get_segment_count_of_packet_at(seg_start)))
+            return TOO_MANY_SEGMENTS
+
         if (bytes_needed + size_of_last_segment) % 255 == (new_segments_needed - 1):
             return OTHER_PACKET_NEEDED
 
@@ -351,9 +356,13 @@ class OggPage:
             return packet_bytes_needed - size_of_padding_count_data + 1
 
 
-    def pad(self, pad_to):
+    def pad(self, pad_to, idx_offset=-1):
         # print("page size before {}".format(self.get_page_size()))
-        idx = len(self.segments) - 1
+        if idx_offset == -1:
+            idx = len(self.segments) - 1
+        else:
+            idx = idx_offset
+
         while not self.segments[idx].first_packet:
             idx = idx - 1
             if idx < 0:
@@ -369,6 +378,10 @@ class OggPage:
             return
         if actual_padding == OTHER_PACKET_NEEDED:
             self.pad_one_byte()
+            self.pad(pad_to)
+            return
+        if actual_padding == TOO_MANY_SEGMENTS:
+            self.pad(pad_to - (pad_count // 2), idx - 1)
             self.pad(pad_to)
             return
 

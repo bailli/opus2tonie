@@ -329,8 +329,8 @@ class OggPage:
                 tmp_count = tmp_count - 255 - 1
                 new_segments_needed = new_segments_needed + 1
 
-        if new_segments_needed + self.get_segment_count_of_packet_at(seg_start) > 255:
-            print("Too many segments needed {}".format(new_segments_needed + self.get_segment_count_of_packet_at(seg_start)))
+        if new_segments_needed + len(self.segments) > 255:
+            # print("Too many segments needed {}".format(new_segments_needed + len(self.segments)))
             return TOO_MANY_SEGMENTS
 
         if (bytes_needed + size_of_last_segment) % 255 == (new_segments_needed - 1):

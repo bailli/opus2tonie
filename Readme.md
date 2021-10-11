@@ -18,7 +18,7 @@ usage: opus2tonie.py [-h] [--ts TIMESTAMP] [--ffmpeg FFMPEG]
 Create Tonie compatible file from Ogg opus file(s).
 
 positional arguments:
-  SOURCE                input file or directory
+  SOURCE                input file or directory or a file list (.lst)
   TARGET                the output file name (default: 500304E0)
 
 optional arguments:
@@ -59,6 +59,14 @@ To generate the python output run:
 ### Input files
 
 If you have `ffmpeg` and `opusenc` in your path (or specify their location) you can use any input files which `ffmpeg` can read. Otherwise you are limited to stereo 48 kHz opus files.
+
+A list file (the extension *must be* .lst) can contain either relative or absolute files. Additionally, you can specify (short) text strings which will be synthesized with Google Cloud text2speech (see below)
+
+### text2speech
+
+Lines starting with `text:` in a list file input will be sent to Google Cloud Text-to-Speech. You will need to have the [librecaptcha](https://pypi.org/project/librecaptcha/) package installed. Solving the captcha seems to take a while but it should be only necessary once (for a "session").
+
+You can change the default settings at the top of the script (`T2S_xxx` variables). Possible values can be taken from here: https://cloud.google.com/text-to-speech
 
 ### Some useful resources
 * https://en.wikipedia.org/wiki/Ogg_page

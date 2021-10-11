@@ -13,6 +13,23 @@ import tempfile
 import time
 import tonie_header_pb2
 
+try:
+    import librecaptcha
+    import requests
+    import base64
+
+    T2S_AVAILABLE = True
+except ImportError:
+    T2S_AVAILABLE = False
+
+T2S_ENDPOINT = 'https://cxl-services.appspot.com/proxy?url=https://texttospeech.googleapis.com/v1beta1/text:synthesize&token='
+T2S_APIKEY = '6LdBnhQUAAAAAMkYSqdAnkafemcA6JtM1N3hlgiL'
+T2S_URL = 'https://www.gstatic.com/'
+T2S_SPEED = 1.00  # Speed 0.25 .. 4.00
+T2S_PITCH = 0  # -20.00 .. 20.00
+T2S_VOICE = "de-DE-Wavenet-A"  # A/C/F Woman -- B/D/E Man -- differs between languages
+T2S_LANGUAGE = T2S_VOICE[:4]
+
 SAMPLE_RATE_KHZ = 48
 
 ONLY_CONVERT_FRAMEPACKING = -1
@@ -21,8 +38,10 @@ DO_NOTHING = -3
 TOO_MANY_SEGMENTS = -4
 
 OPUS_TAGS = [
-    bytearray(b"\x4F\x70\x75\x73\x54\x61\x67\x73\x0D\x00\x00\x00\x4C\x61\x76\x66\x35\x38\x2E\x32\x30\x2E\x31\x30\x30\x03\x00\x00\x00\x26\x00\x00\x00\x65\x6E\x63\x6F\x64\x65\x72\x3D\x6F\x70\x75\x73\x65\x6E\x63\x20\x66\x72\x6F\x6D\x20\x6F\x70\x75\x73\x2D\x74\x6F\x6F\x6C\x73\x20\x30\x2E\x31\x2E\x31\x30\x2A\x00\x00\x00\x65\x6E\x63\x6F\x64\x65\x72\x5F\x6F\x70\x74\x69\x6F\x6E\x73\x3D\x2D\x2D\x71\x75\x69\x65\x74\x20\x2D\x2D\x62\x69\x74\x72\x61\x74\x65\x20\x39\x36\x20\x2D\x2D\x76\x62\x72\x3B\x01\x00\x00\x70\x61\x64\x3D\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30"),
-    bytearray(b"\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30")
+    bytearray(
+        b"\x4F\x70\x75\x73\x54\x61\x67\x73\x0D\x00\x00\x00\x4C\x61\x76\x66\x35\x38\x2E\x32\x30\x2E\x31\x30\x30\x03\x00\x00\x00\x26\x00\x00\x00\x65\x6E\x63\x6F\x64\x65\x72\x3D\x6F\x70\x75\x73\x65\x6E\x63\x20\x66\x72\x6F\x6D\x20\x6F\x70\x75\x73\x2D\x74\x6F\x6F\x6C\x73\x20\x30\x2E\x31\x2E\x31\x30\x2A\x00\x00\x00\x65\x6E\x63\x6F\x64\x65\x72\x5F\x6F\x70\x74\x69\x6F\x6E\x73\x3D\x2D\x2D\x71\x75\x69\x65\x74\x20\x2D\x2D\x62\x69\x74\x72\x61\x74\x65\x20\x39\x36\x20\x2D\x2D\x76\x62\x72\x3B\x01\x00\x00\x70\x61\x64\x3D\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30"),
+    bytearray(
+        b"\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30\x30")
 ]
 
 
@@ -644,6 +663,8 @@ def create_tonie_file(output_file, input_files, no_tonie_header=False, user_time
 
             if fname.lower().endswith(".opus"):
                 handle = open(fname, "rb")
+            elif fname.lower().startswith("text:"):
+                handle = get_t2s_tempfile(ffmpeg, opusenc, fname[5:], bitrate, not cbr)
             else:
                 handle = get_opus_tempfile(ffmpeg, opusenc, fname, bitrate, not cbr)
 
@@ -709,7 +730,7 @@ def get_header_info(in_file):
     OggPage(in_file)
 
     return header_size, tonie_header, file_size, audio_size, sha1sum, opus_head_found, \
-        opus_version, channel_count, sample_rate, bitstream_serial_no
+           opus_version, channel_count, sample_rate, bitstream_serial_no
 
 
 def get_audio_info(in_file, sample_rate, tonie_header, header_size):
@@ -759,24 +780,24 @@ def format_hex(data):
 def check_tonie_file(filename):
     with open(filename, "rb") as in_file:
         header_size, tonie_header, file_size, audio_size, sha1, opus_head_found, \
-            opus_version, channel_count, sample_rate, bitstream_serial_no = get_header_info(in_file)
+        opus_version, channel_count, sample_rate, bitstream_serial_no = get_header_info(in_file)
 
         page_count, alignment_okay, page_size_okay, total_time, \
-            chapters = get_audio_info(in_file, sample_rate, tonie_header, header_size)
+        chapters = get_audio_info(in_file, sample_rate, tonie_header, header_size)
 
     hash_ok = tonie_header.dataHash == sha1.digest()
     timestamp_ok = tonie_header.timestamp == bitstream_serial_no
     audio_size_ok = tonie_header.dataLength == audio_size
     opus_ok = opus_head_found and \
-        opus_version == 1 and \
-        (sample_rate == 48000 or sample_rate == 44100) and \
-        channel_count == 2
+              opus_version == 1 and \
+              (sample_rate == 48000 or sample_rate == 44100) and \
+              channel_count == 2
 
     all_ok = hash_ok and \
-        timestamp_ok and \
-        opus_ok and \
-        alignment_okay and \
-        page_size_okay
+             timestamp_ok and \
+             opus_ok and \
+             alignment_okay and \
+             page_size_okay
 
     print("[{}] SHA1 hash: 0x{}".format("OK" if hash_ok else "NOT OK", format_hex(tonie_header.dataHash)))
     if not hash_ok:
@@ -787,7 +808,7 @@ def check_tonie_file(filename):
         print("   bitstream serial: 0x{:X}".format(bitstream_serial_no))
     print("[{}] Opus data length: {} bytes (~{:2.0f} kbps)".format("OK" if audio_size_ok else "NOT OK",
                                                                    tonie_header.dataLength,
-                                                                   (audio_size * 8)/1024/total_time))
+                                                                   (audio_size * 8) / 1024 / total_time))
     if not audio_size_ok:
         print("     actual: {} bytes".format(audio_size))
 
@@ -803,7 +824,7 @@ def check_tonie_file(filename):
     print("[ii] Total runtime: {}".format(granule_to_time_string(total_time)))
     print("[ii] {} Tracks:".format(len(chapters)))
     for i in range(0, len(chapters)):
-        print("  Track {:02d}: {}".format(i+1, chapters[i]))
+        print("  Track {:02d}: {}".format(i + 1, chapters[i]))
     return all_ok
 
 
@@ -815,6 +836,69 @@ def granule_to_time_string(granule, sample_rate=1):
     fraction = int((total_seconds * 100) % 100)
     time_string = "{:02d}:{:02d}:{:02d}.{:02d}".format(hours, minutes, seconds, fraction)
     return time_string
+
+
+def get_t2s_token():
+    assert T2S_AVAILABLE, "If you want to use the text2speech Google Cloud \n" \
+                          "service you need to install the librecaptcha package!"
+    return librecaptcha.get_token(T2S_APIKEY, T2S_URL, librecaptcha.random_user_agent(), gui=True, debug=False)
+
+
+def get_t2s_base64_data(text):
+    token = "this-is-definitly-a-token"
+    json = {
+        "audioConfig": {
+            "audioEncoding": "LINEAR16",
+            "pitch": T2S_PITCH,
+            "speakingRate": T2S_SPEED
+        },
+        "input": {
+            "text": text
+        },
+        "voice": {
+            "languageCode": T2S_LANGUAGE,
+            "name": T2S_VOICE
+        }
+    }
+    response = requests.post(T2S_ENDPOINT + token,
+                             json=json,
+                             headers={"Content-Type": "application/json;charset=UTF-8"})
+
+    if response.status_code == 401:
+        token = get_t2s_token()
+        response = requests.post(T2S_ENDPOINT + token,
+                                 json=json,
+                                 headers={"Content-Type": "application/json;charset=UTF-8"})
+
+    assert response.status_code == 200, \
+        "Got {} response when trying to get synthesized speech".format(response.status_code)
+    return response.json().get("audioContent")
+
+
+def get_t2s_tempfile(ffmpeg_binary, opus_binary, text, bitrate, vbr=True):
+    t2s_base64 = get_t2s_base64_data(text)
+
+    if not vbr:
+        vbr_parameter = "--hard-cbr"
+    else:
+        vbr_parameter = "--vbr"
+
+    ffmpeg_process = subprocess.Popen(
+        ["{}".format(ffmpeg_binary), "-hide_banner", "-loglevel", "warning", "-i", "pipe:", "-ac", "2", "-f", "wav",
+         "-ar", "48000", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    opusenc_process = subprocess.Popen(
+        ["{}".format(opus_binary), "--quiet", vbr_parameter, "--bitrate", "{:d}".format(bitrate), "-", "-"],
+        stdin=ffmpeg_process.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    ffmpeg_process.stdin.write(base64.b64decode(t2s_base64))
+    ffmpeg_process.stdin.close()
+
+    tmp_file = tempfile.SpooledTemporaryFile()
+    for c in iter(lambda: opusenc_process.stdout.read(1), b""):
+        tmp_file.write(c)
+    tmp_file.seek(0)
+
+    return tmp_file
 
 
 def get_opus_tempfile(ffmpeg_binary, opus_binary, filename, bitrate, vbr=True):
@@ -853,7 +937,7 @@ def get_input_files(input_filename):
         with open(input_filename) as file_list:
             for line in file_list:
                 fname = line.rstrip()
-                if os.path.isabs(fname):
+                if os.path.isabs(fname) or fname.startswith("text:"):
                     input_files.append(fname)
                 else:
                     input_files.append(os.path.join(list_dir, fname))
@@ -901,8 +985,8 @@ def split_to_opus_files(filename):
             else:
                 end_page = 0
             granule = 0
-            print(format_string.format(i+1, filename_template.format(i+1)))
-            with open("{}{}".format(out_path, filename_template.format(i+1)), "wb") as out_file:
+            print(format_string.format(i + 1, filename_template.format(i + 1)))
+            with open("{}{}".format(out_path, filename_template.format(i + 1)), "wb") as out_file:
                 first_page.write_page(out_file)
                 second_page.write_page(out_file)
                 while found and ((page.page_no < end_page) or (end_page == 0)):
@@ -917,7 +1001,7 @@ def split_to_opus_files(filename):
 crc_table = create_table()
 
 parser = argparse.ArgumentParser(description='Create Tonie compatible file from Ogg opus file(s).')
-parser.add_argument('input_filename', metavar='SOURCE', type=str, help='input file or directory')
+parser.add_argument('input_filename', metavar='SOURCE', type=str, help='input file or directory or a file list (.lst)')
 parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str,
                     help='the output file name (default: 500304E0)', default='500304E0')
 parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store',

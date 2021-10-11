@@ -846,6 +846,22 @@ def filter_directories(glob_list):
     return result
 
 
+def get_input_files(input_filename):
+    if input_filename.endswith(".lst"):
+        list_dir = os.path.dirname(os.path.abspath(input_filename))
+        input_files = []
+        with open(input_filename) as file_list:
+            for line in file_list:
+                fname = line.rstrip()
+                if os.path.isabs(fname):
+                    input_files.append(fname)
+                else:
+                    input_files.append(os.path.join(list_dir, fname))
+    else:
+        input_files = sorted(filter_directories(glob.glob("{}".format(input_filename))))
+    return input_files
+
+
 def split_to_opus_files(filename):
     with open(filename, "rb") as in_file:
         tonie_header = tonie_header_pb2.TonieHeader()
@@ -934,7 +950,7 @@ else:
         split_to_opus_files(args.input_filename)
         sys.exit(0)
 
-files = sorted(filter_directories(glob.glob("{}".format(args.input_filename))))
+files = get_input_files(args.input_filename)
 
 if len(files) == 0:
     print("No files found for pattern {}".format(args.input_filename))

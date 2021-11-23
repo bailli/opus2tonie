@@ -946,14 +946,19 @@ def get_input_files(input_filename):
     return input_files
 
 
-def split_to_opus_files(filename):
+def split_to_opus_files(filename, output):
     with open(filename, "rb") as in_file:
         tonie_header = tonie_header_pb2.TonieHeader()
         header_size = struct.unpack(">L", in_file.read(4))[0]
         tonie_header = tonie_header.FromString(in_file.read(header_size))
 
         abs_path = os.path.abspath(filename)
-        path = os.path.dirname(abs_path)
+        if output:
+            if not os.path.exists(output):
+                os.makedirs(output)
+            path = output
+        else:
+            path = os.path.dirname(abs_path)
         name = os.path.basename(abs_path)
         pos = name.rfind('.')
         if pos == -1:
@@ -1003,7 +1008,7 @@ crc_table = create_table()
 parser = argparse.ArgumentParser(description='Create Tonie compatible file from Ogg opus file(s).')
 parser.add_argument('input_filename', metavar='SOURCE', type=str, help='input file or directory or a file list (.lst)')
 parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str,
-                    help='the output file name (default: 500304E0)', default='500304E0')
+                    help='the output file name (default: 500304E0)')
 parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store',
                     help='set custom timestamp / bitstream serial')
 
@@ -1019,10 +1024,6 @@ parser.add_argument('--split', action='store_true', help='Split Tonie file into 
 
 args = parser.parse_args()
 
-if args.append_tonie_filename:
-    out_filename = append_to_filename(args.output_filename, "[500304E0]")
-else:
-    out_filename = args.output_filename
 
 if os.path.isdir(args.input_filename):
     args.input_filename += "/*"
@@ -1031,7 +1032,7 @@ else:
         ok = check_tonie_file(args.input_filename)
         sys.exit(0 if ok else 1)
     elif args.split:
-        split_to_opus_files(args.input_filename)
+        split_to_opus_files(args.input_filename, args.output_filename)
         sys.exit(0)
 
 files = get_input_files(args.input_filename)
@@ -1039,6 +1040,11 @@ files = get_input_files(args.input_filename)
 if len(files) == 0:
     print("No files found for pattern {}".format(args.input_filename))
     sys.exit(1)
+
+if args.append_tonie_filename and args.output_filename:
+    out_filename = append_to_filename(args.output_filename, "[500304E0]")
+else:
+    out_filename = '500304E0'
 
 create_tonie_file(out_filename, files, args.no_tonie_header, args.user_timestamp,
                   args.bitrate, args.cbr, args.ffmpeg, args.opusenc)

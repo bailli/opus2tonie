@@ -1041,10 +1041,10 @@ if len(files) == 0:
     print("No files found for pattern {}".format(args.input_filename))
     sys.exit(1)
 
+out_filename = args.output_filename if args.output_filename else '500304E0'
+
 if args.append_tonie_filename and args.output_filename:
     out_filename = append_to_filename(args.output_filename, "[500304E0]")
-else:
-    out_filename = '500304E0'
 
 create_tonie_file(out_filename, files, args.no_tonie_header, args.user_timestamp,
                   args.bitrate, args.cbr, args.ffmpeg, args.opusenc)

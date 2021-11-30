@@ -106,8 +106,10 @@ class OpusPacket:
         elif self.config_value in [19, 23, 27, 31]:
             return 20
         else:
-            raise RuntimeError("Please add frame size for config value {}".format(self.config_value))
-
+            raise RuntimeError(
+                "Found config value {} in opus packet, but CELT-only encodings (16-31) are required by the box.\n" \
+                "Please encode your input files accordingly or fix your encoding pipeline to do so.\n" \
+                "Did you built libopus with custom modes support?".format(self.config_value))
 
     def calc_granule(self):
         return self.frame_size * self.frame_count * SAMPLE_RATE_KHZ

@@ -4,7 +4,7 @@
 
 ### Current state
 
-A first test produced files which were accepted by the Tonie box.
+At the time of writing the script can produce files that can be played by the Tonie box.
 
 ### Usage
 

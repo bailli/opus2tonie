@@ -37,16 +37,17 @@ optional arguments:
 
 ### Firmware problems
 
-The most recent firmware version of the Tonie box has a few drawbacks:
+The firmware of the Tonie box has drawbacks **when it can connect to the internet via WiFi**:
 
-* Reading custom NFC tags while connected to the internet will result in the deletion of the associated audio data.
-* When the box is idle and connected to the internet it will set the "hidden" FAT filesystem attribute for custom audio data files. This will have the effect of enabling "live" mode for these files => the NFC tag will always trigger playback of the beginning of the file (no matter whether another NFC tag was used in-between). 
-* When the box boots (i.e. after re-connecting the battery) it will always enable Wi-Fi and therefore apply the "hidden" filesystem attribute for custom audio files as described above. 
-  
+* Reading custom NFC tags will result in the deletion of the associated audio data.
 
-Other tidbits:
+* Reading an official Tonie that has custom content stored on the box will delete the custom content and download the original files again, unless the internal timestamps are identical
 
-(*found somewhere else; unconfirmed*) If you replace an official Tonie with custom content and keep the same `timestamp` as the official file, the replaced content will even work when the box is online.  
+* On startup, or when idle, it will set the "hidden" FAT filesystem attribute for custom audio data files with incongruous internal timestamps. This enables "live" mode for these files and the NFC tag will always trigger playback from the beginning of the file (no matter whether another NFC tag was used in-between).
+  You can only enter the offline mode of the box *after* startup, so to avoid this effect you need to block the box on your wireless network before connecting it to the batteries again.
+
+The latter two issues can be circumvented by using the `timestamp` that is officially associated with the Tonie for the custom content.
+You can identify this timestamp through `./opus2tonie.py --info` and generate your custom files with the optional `--ts <timestamp>` parameter.
 
 ### Tonie header
 

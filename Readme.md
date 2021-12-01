@@ -44,9 +44,10 @@ The firmware of the Tonie box has drawbacks **when it can connect to the interne
 * Reading an official Tonie that has custom content stored on the box will delete the custom content and download the original files again, unless the internal timestamps are identical
 
 * On startup, or when idle, it will set the "hidden" FAT filesystem attribute for custom audio data files with incongruous internal timestamps. This enables "live" mode for these files and the NFC tag will always trigger playback from the beginning of the file (no matter whether another NFC tag was used in-between).
-  You can only enter the offline mode of the box *after* startup, so to avoid this effect you need to block the box on your wireless network before connecting it to the batteries again.
+  You can only enter the offline mode of the box *after* startup, so to avoid this effect you need to block the box on your wireless network before connecting it to the batteries again. \
+  You may also plug an "extension cord" into the internal SD card slot to make it reachable without disconnecting the battery. Then you can eject the card and add new files or fix the FAT fs attribute while the box is in sleep mode.
 
-The latter two issues can be circumvented by using the `timestamp` that is officially associated with the Tonie for the custom content.
+When you use original Tonie figurines (or their NFC tag) the latter two issues can be circumvented by using the `timestamp` that is officially associated with the Tonie for the custom content.
 You can identify this timestamp through `./opus2tonie.py --info` and generate your custom files with the optional `--ts <timestamp>` parameter.
 
 ### Tonie header

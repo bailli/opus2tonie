@@ -847,6 +847,8 @@ def get_t2s_token():
 
 
 def get_t2s_base64_data(text):
+    assert T2S_AVAILABLE, "If you want to use the text2speech Google Cloud \n" \
+                          "service you need to install the librecaptcha package!"
     token = "this-is-definitly-a-token"
     json = {
         "audioConfig": {
@@ -878,6 +880,8 @@ def get_t2s_base64_data(text):
 
 
 def get_t2s_tempfile(ffmpeg_binary, opus_binary, text, bitrate, vbr=True):
+    assert T2S_AVAILABLE, "If you want to use the text2speech Google Cloud \n" \
+                          "service you need to install the librecaptcha package!"
     t2s_base64 = get_t2s_base64_data(text)
 
     if not vbr:

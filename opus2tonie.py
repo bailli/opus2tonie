@@ -939,6 +939,8 @@ def get_input_files(input_filename):
         with open(input_filename) as file_list:
             for line in file_list:
                 fname = line.rstrip()
+                if fname.startswith("text:") and not T2S_AVAILABLE:
+                    raise RuntimeError("You cannot use text2speech (\"text:\" list entries) without librecaptcha")
                 if os.path.isabs(fname) or fname.startswith("text:"):
                     input_files.append(fname)
                 else:

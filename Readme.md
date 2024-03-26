@@ -18,7 +18,7 @@ usage: opus2tonie.py [-h] [--ts TIMESTAMP] [--ffmpeg FFMPEG]
 Create Tonie compatible file from Ogg opus file(s).
 
 positional arguments:
-  SOURCE                input file or directory or a file list (.lst)
+  SOURCE                single input file, directory of files, a file list (.lst) or m3u playlist (.m3u)
   TARGET                the output file name (default: 500304E0)
 
 optional arguments:
@@ -63,6 +63,8 @@ To generate the python output run:
 If you have `ffmpeg` and `opusenc` in your path (or specify their location) you can use any input files which `ffmpeg` can read. Otherwise you are limited to stereo 48 kHz opus files.
 
 A list file (the extension *must be* .lst) can contain either relative or absolute files. Additionally, you can specify (short) text strings which will be synthesized with Google Cloud text2speech (see below)
+
+A m3u(8) playlist.
 
 ### text2speech
 

@@ -945,6 +945,20 @@ def get_input_files(input_filename):
                     input_files.append(fname)
                 else:
                     input_files.append(os.path.join(list_dir, fname))
+    elif input_filename.endswith(".m3u") or input_filename.endswith(".m3u8"):
+        list_dir = os.path.dirname(os.path.abspath(input_filename))
+        input_files = []
+        with open(input_filename) as m3u_list:
+            for line in m3u_list:
+                fname = line.rstrip()
+                if fname.startswith("#"):       #skip m3u tags
+                    continue
+                if fname.startswith("file:///"):
+                    fname = fname.replace("file:///","")
+                    if os.path.isabs(fname):
+                        input_files.append(fname)
+                    else:
+                        input_files.append(os.path.join(list_dir, fname))
     else:
         input_files = sorted(filter_directories(glob.glob("{}".format(input_filename))))
     return input_files
@@ -1010,7 +1024,7 @@ def split_to_opus_files(filename, output):
 crc_table = create_table()
 
 parser = argparse.ArgumentParser(description='Create Tonie compatible file from Ogg opus file(s).')
-parser.add_argument('input_filename', metavar='SOURCE', type=str, help='input file or directory or a file list (.lst)')
+parser.add_argument('input_filename', metavar='SOURCE', type=str, help='single input file, directory of files, a file list (.lst) or m3u playlist (.m3u)')
 parser.add_argument('output_filename', metavar='TARGET', nargs='?', type=str,
                     help='the output file name (default: 500304E0)')
 parser.add_argument('--ts', dest='user_timestamp', metavar='TIMESTAMP', action='store',

@@ -1,0 +1,3 @@
+librecaptcha==0.7.3
+Requests==2.31.0
+protobuf
